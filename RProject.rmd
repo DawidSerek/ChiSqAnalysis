@@ -1,0 +1,455 @@
+---
+title: "Badanie zbieżności rozkładu średniej arytmetycznej"
+author: "Jakub Wasiczek, Dawid Serek, Dawid Żakieta"
+date: "2024-01-04"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    theme: darkly
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
+library(ggplot2)
+library(moments)
+library(dplyr)
+library(data.table)
+set.seed(15)
+```
+  
+# Wariant I
+
+## Teoretyczny rozkład $\chi^{2}$ (ad. 0)
+
+Rozkłady $\chi^{2}$ o 2 i 40 stopniach swobody  
+
+
+```{r, echo=FALSE}
+
+df2_data <- data.frame(x = seq(0, 80, 0.1),
+                       y = dchisq(seq(0, 80, 0.1), df = 2))
+df40_data <- data.frame(x = seq(0, 80, 0.1),
+                        y = dchisq(seq(0, 80, 0.1), df = 40))
+
+ggplot(xlim=c(0,80)) +
+  geom_line (
+    data = df2_data, 
+    aes(x = x, y = y, color = "2"), 
+  ) +
+  geom_line (
+    data = df40_data, 
+    aes(x = x, y = y, color = "40"), 
+  ) +
+  labs (
+    title = "Rozkłady Chi-kwadrat",
+  ) +
+  scale_color_manual (
+    name = "Ilość st. swobody",
+    values = c("2" = "blue", "40" = "red")
+  ) +
+  theme_classic()
+
+
+
+```
+  
+  | Liczba st. swobody|  EX  |  $\sigma$   | Skośność | Kurtoza |
+|:-------------------:|-----:|------------:|---------:|--------:|
+| 2                   | 2    |      2      |    2     |    6    |
+| 40                  | 40   |    8.94     |  0.45    |   0.3   |
+
+## Generacja danych (ad. 1, 2, 3)
+
+W wariancie pierwszym rozkład jest generowany jako 300 średnich artmetycznych k wartości z rozkładu $\chi^{2}$,
+uzyskując rozkłady dokładniej przedstawione poniżej. 
+
+```{r, echo = TRUE}
+N <- 300
+k <- c(5,10,20,30,50,100,200,500,1000)
+V <- c(2,40)
+
+my_data <- data.frame(dane = NULL, k = NULL, df = NULL)
+
+stats <- data.frame()
+
+for( st_sw  in V ) {
+  for(x in k) {
+    
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw) )
+      )
+    }
+    danef <- data.frame("dane" = dane, "k" = x, "df" = st_sw)
+    my_data <- rbind(my_data, danef)
+    
+  }
+}
+```
+  
+
+## Prezentacja (ad. 4, 5)
+
+Zgodnie z *centralnym twierdzeniem granicznym*:  
+Możemy zaobserwować, że wraz ze wzrostem liczby obserwacji,  
+rozkład średniej arytmetycznej niezależnych zmiennych losowych o tych samych
+rozkładach $\chi^{2}$, wartości oczekiwanej i skończonej wariancji, dąży do postaci rozkładu normalnego.
+
+```{r, echo = FALSE}
+
+my_data$k <- as.factor(my_data$k)
+
+my_data %>%
+  ggplot() + 
+  geom_density(mapping = aes(x = dane), fill = "red", alpha = 0.8) +
+  facet_grid(vars(k), vars(df), scales = "free") +
+        labs(
+          x = "",
+          y = ""
+        ) +
+  theme_classic()
+
+```
+
+Wraz ze wzrostem liczby obserwacji, wariancja rozkładu się zmniejsza.  
+Co raz więcej wartości jest skupionych wokół wartości oczekiwanej.  
+Pokrywa się to postacią asymptotycznego rozkładu normalnego, do którego dąży średnia:  
+$N(m, \frac{\sigma}{\sqrt(n)})$  
+  
+Najbardziej widoczne jest to na wykresach pudełkowych:
+
+```{r, echo = FALSE}
+
+my_data %>%
+  ggplot() + 
+    geom_boxplot(mapping = aes(y = dane, x = k)) +
+  facet_wrap(~df, scales = "free") +
+  labs(x = "", y = "") +
+  theme_classic()
+
+```
+
+
+Dzięki wynikom *testu shapiro-wilka*, możemy zaobserwować jak wraz ze wzrostem danych rozkład dąży do postaci rozkładu normalnego.  
+
+```{r, echo = FALSE}
+dane_shapiro <- data.frame()
+
+for( st_sw  in V ) {
+  
+  for(x in k) {
+    
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw) )
+      )
+    }
+    
+    
+    wartosc_p <- shapiro.test(dane)
+    
+
+    if(wartosc_p$p.value < 0.05) 
+    {
+      dane_r <- data.frame("df" = st_sw, "k" = x, "p-value" = wartosc_p$p.value, 
+                           "Rozkład" = "Inny")
+      dane_shapiro  <- rbind(dane_shapiro , dane_r)
+    }
+    else{
+      dane_r <- data.frame("df" = st_sw, "k" = x, "p-value" = wartosc_p$p.value, 
+                           "Rozkład" = "Normalny")
+      dane_shapiro  <- rbind(dane_shapiro , dane_r)
+      }
+  }
+}
+
+print(data.table(dane_shapiro))
+
+```
+  
+Poniżej zostały przedstawione rozkłady dla poszczególnych liczebności próby i stopni swobody:  
+    
+```{r echo=FALSE}
+stats_data <- data.frame()
+
+for( st_sw  in V ) {
+  for(x in k) {
+    
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw) )
+      )
+    }
+    danef <- data.frame("dane" = dane, "k" = x, "df" = st_sw)
+    my_data <- rbind(my_data, danef)
+    plot( 
+      ggplot() +
+        geom_histogram(
+          mapping = aes(x = dane)
+        ) + 
+        labs(
+          title = paste("Rozkład χ2, gdy V = ", st_sw, " i k = ", x),
+          x = "Dane",
+          y = "Ilość"
+        ) +
+    theme_classic()
+    )
+    cat( 
+      paste( " Średnia: ", mean(dane) ), "\n",
+      paste( "Odchylenie std: ", sd(dane) ) , "\n",
+      paste( "Skośność: ", skewness(dane) ), "\n",
+      paste( "Kurtoza: ", kurtosis(dane) )
+    )
+    dane_to_add <- data.frame(
+      "df" = st_sw,
+      "k" = x,
+      "srednia" = mean(dane),
+      "odch_stand" = sd(dane),
+      "skosnosc" = skewness(dane),
+      "kurtoza" = kurtosis(dane)
+      
+    )
+    stats_data <- rbind(stats_data, dane_to_add)
+  }
+}
+```
+  
+## Podsumowanie statystyk
+
+**Dla 2 stopni swobody:**
+```{r echo=FALSE}
+print(stats_data[stats_data$df == 2, ])
+```
+**Dla 40 stopni swobody:**
+```{r echo=FALSE}
+print(stats_data[stats_data$df == 40, ])
+```    
+  
+**Występując następujące zależności**:  
+Przy zmianie *k*, średnia wartość pozostaje (mniej więcej) taka sama, a odchylenie standardowe stale maleje.  
+Wartość kurtozy, niezależnie od liczby stopni swobody i *k* występuje w okolicach trójki.  
+Dodatnia skośność przy df = 2 sugeruje, że przy małym *k* zmienna ma rozkład asymetryczny prawostronny,   
+który wraz ze wzrostem *k* zmienia się coraz bardziej w rozkład symetryczny (od *k* = 50 rozkład jest już praktycznie symetryczny).  
+Przy df = 40 rozkład cały czas jest symetryczny.  
+  
+  
+
+# Wariant II  
+  
+## Teoretyczny rozkład $\chi^{2}$, którego wartości zostały podniesione do kwadratu (ad. 0)
+
+```{r, echo = FALSE}
+teor0 <- rchisq(10000, 2)
+wartosci0 <- teor0^2
+
+ggplot() + 
+  geom_density(mapping = aes(x = wartosci0)) +
+  theme_classic() +
+  labs( 
+    title = "wartości wylosowane z χ2 o 2 stopniach swobody",
+    y = "",
+    x = ""
+  )
+
+cat("Wartość oczekiwana: ", round(mean(wartosci0), 2))
+cat("Odchylenie standardowe: ", round(sd(wartosci0), 2))
+cat("Skośność: ", round(skewness(wartosci0), 2))
+cat("Kurtoza: ", round(kurtosis(wartosci0), 2))
+
+
+```
+  
+```{r, echo = FALSE}
+teor0 <- rchisq(10000, 40)
+wartosci0 <- teor0^2
+
+ggplot() + 
+  geom_density(mapping = aes(x = wartosci0)) +
+  theme_classic() +
+  labs( 
+    title = "wartości wylosowane z χ2 o 40 stopniach swobody",
+    y = "",
+    x = ""
+  )
+
+cat("Wartość oczekiwana: ", round(mean(wartosci0), 2))
+cat("Odchylenie standardowe: ", round(sd(wartosci0), 2))
+cat("Skośność: ", round(skewness(wartosci0), 2))
+cat("Kurtoza: ", round(kurtosis(wartosci0), 2))
+
+```
+  
+## Generacja danych (ad. 1, 2, 3)
+
+W wariancie drugim rozkład jest generowany jako 300 średnich artmetycznych k wartości z rozkładu $\chi^{2}$,
+podniesionych do kwadratu, uzyskując rozkłady dokładniej przedstawione poniżej.
+  
+```{r, echo = TRUE}
+N <- 300
+k <- c(5,10,20,30,50,100,200,500,1000)
+V <- c(2,40)
+
+my_data <- data.frame(dane = NULL, k = NULL, df = NULL)
+
+for( st_sw  in V ) {
+  for(x in k) {
+    
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw)^2 )
+      )
+    }
+    danef <- data.frame("dane" = dane, "k" = x, "df" = st_sw)
+    my_data <- rbind(my_data, danef)
+    
+  }
+}
+```
+  
+
+
+## Prezentacja (ad. 4, 5)
+  
+Zgodnie z wcześniej przywołanym *centralnym twierdzeniem granicznym* wraz ze wzrostem liczby obserwacji,  
+rozkład średniej arytmetycznej niezależnych zmiennych losowych o tych samych
+rozkładach, wartości oczekiwanej i skończonej wariancji, dąży do postaci rozkładu normalnego.  
+Natomiast w tym przypadku, rozkłady cechują się z początku większą asymetrią.  
+Dodatkowo "prędkość" z jaką dążą do tej postaci jest mniejsza. 
+
+
+```{r, echo = FALSE}
+
+my_data$k <- as.factor(my_data$k)
+
+my_data %>%
+  ggplot() + 
+    geom_boxplot(mapping = aes(y = dane, x = k)) +
+  facet_wrap(~df, scales = "free") +
+  labs(x = "", y = "") +
+  theme_classic()
+
+```
+  
+  
+Odzwierciedlone jest to również w wynikach *testu shapiro-wilka*:   
+
+```{r, echo = FALSE}
+dane_shapiro <- data.frame()
+
+for( st_sw  in V ) {
+  
+  for(x in k) {
+    
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw)^2 )
+      )
+    }
+    
+    
+    wartosc_p <- shapiro.test(dane)
+    
+
+    if(wartosc_p$p.value < 0.05) 
+    {
+      dane_r <- data.frame("df" = st_sw, "k" = x, "p-value" = wartosc_p$p.value, 
+                           "Rozkład" = "Inny")
+      dane_shapiro  <- rbind(dane_shapiro , dane_r)
+    }
+    else{
+      dane_r <- data.frame("df" = st_sw, "k" = x, "p-value" = wartosc_p$p.value, 
+                           "Rozkład" = "Normalny")
+      dane_shapiro  <- rbind(dane_shapiro , dane_r)
+      }
+  }
+}
+
+print(data.table(dane_shapiro))
+
+```
+  
+  
+Poniżej można zobaczyć jak prezentują się omawiane rozkłady:  
+
+```{r, echo = FALSE}
+N <- 300
+k <- c(5,10,20,30,50,100,200,500,1000)
+V <- c(2,40)
+
+my_data <- data.frame(dane = NULL, k = NULL, df = NULL)
+
+stats_data_2 <- data.frame()
+for( st_sw  in V ) {
+  for(x in k) {
+
+    dane <- NULL
+    for (i in 1:N) {
+      dane <- c(
+        dane, 
+        mean( rchisq(x, df = st_sw)^2 )
+      )
+    }
+    danef <- data.frame("dane" = dane, "k" = x, "df" = st_sw)
+    my_data <- rbind(my_data, danef)
+    plot( 
+      ggplot() +
+        geom_histogram(
+          mapping = aes(x = dane)
+        ) + 
+        labs(
+          title = paste("Rozkład (χ2)^2, gdy V = ", st_sw, " i k = ", x),
+          x = "Dane",
+          y = "Ilość"
+        ) +
+    theme_classic()
+    )
+    cat( 
+      paste( " Średnia: ", mean(dane) ), "\n",
+      paste( "Odchylenie std: ", sd(dane) ) , "\n",
+      paste( "Skośność: ", skewness(dane) ), "\n",
+      paste( "Kurtoza: ", kurtosis(dane) )
+    )
+    dane_to_add_2 <- data.frame(
+      "df" = st_sw,
+      "k" = x,
+      "srednia" = mean(dane),
+      "odch_stand" = sd(dane),
+      "skosnosc" = skewness(dane),
+      "kurtoza" = kurtosis(dane)
+      
+    )
+    stats_data_2 <- rbind(stats_data_2, dane_to_add_2)
+  }
+}
+```
+  
+  
+## Podsumowanie statystyk  
+
+**Dla 2 stopni swobody:**
+```{r echo=FALSE}
+print(stats_data_2[stats_data_2$df == 2, ])
+```
+**Dla 40 stopni swobody:**
+```{r echo=FALSE}
+print(stats_data_2[stats_data_2$df == 40, ])
+```
+  
+
+Możemy zaobserwować te same zależności co w poprzednim wariancie.  
+Jednakże, rozkłady cechują się z początku większym odchyleniem standardowym i asymetrią. 
+
+
