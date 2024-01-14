@@ -1,0 +1,160 @@
+```{r}
+library(ggplot2)
+library(psych)
+library(e1071)
+
+dane1 <- read.csv("https://stooq.pl/q/d/l/?s=11b&d1=20220101&d2=20231231&i=d&o=1000000")
+dane2 <- read.csv("https://stooq.pl/q/d/l/?s=ten&d1=20220101&d2=20231231&i=d&o=1000000")
+
+
+dodanie_stopy <- function(dane){
+  logarytmiczne_stopy <- c(NA)
+  
+  for(i in 2:(nrow(dane))) {
+    logarytmiczne_stopy <- c(logarytmiczne_stopy, log(dane$Zamkniecie[i] / dane$Zamkniecie[i-1]))
+  }
+  
+  dane$logarytmiczne_stopy <- logarytmiczne_stopy
+  return(dane)
+}
+
+
+obliczenie_statystyk<- function(dane){
+  srednia <- mean(dane$logarytmiczne_stopy, na.rm = TRUE)
+  odchylenie_stand <- sd(dane$logarytmiczne_stopy, na.rm = TRUE)
+  skosnosc <- skewness(dane$logarytmiczne_stopy, na.rm = TRUE)
+  kurtoza <- kurtosis(dane$logarytmiczne_stopy, na.rm = TRUE)
+  
+  cat("Średnia:", srednia, "\n")
+  cat("Odchylenie standardowe:", odchylenie_stand, "\n")
+  cat("Skośność:", skosnosc, "\n")
+  cat("Kurtoza:", kurtoza, "\n")
+}
+
+histogram <- function(dane) {
+  
+  ggplot(dane, aes(x = logarytmiczne_stopy)) +
+    geom_histogram(binwidth = 0.01, fill = "lightblue", color = "darkblue", alpha = 0.7) +
+    labs(title = "Histogram logarytmicznych stóp zwrotu", x = "Logarytmiczne stopy zwrotu") +
+    theme_minimal()
+}
+
+
+wykres_pudelkowy <- function(dane) {
+  
+  ggplot(dane, aes(y = logarytmiczne_stopy)) +
+    geom_boxplot(fill = "lightblue", color = "darkblue", alpha = 0.7) +
+    labs(title = "Wykres pudełkowy logarytmicznych stóp zwrotu", y = "Logarytmiczne stopy zwrotu") +
+    theme_minimal()
+}
+
+dane1 <- dodanie_stopy(dane1)
+obliczenie_statystyk(dane1)
+histogram(dane1)
+wykres_pudelkowy(dane1)
+
+dane2 <- dodanie_stopy(dane2)
+obliczenie_statystyk(dane2)
+histogram(dane2)
+wykres_pudelkowy(dane2)
+```
+
+
+
+
+
+## Testy istotności korelacji
+
+```{r echo=FALSE}
+wsp_korelacji <- function(dane1, dane2) {
+  
+  dane1 <- na.omit(dane1)
+  dane2 <- na.omit(dane2)
+  
+  # Korelacja Pearsona
+  cor_pearson <- cor(dane1$logarytmiczne_stopy, dane2$logarytmiczne_stopy)
+  
+  # Test korelacji Pearsona
+  test_pearson <- cor.test(dane1$logarytmiczne_stopy, dane2$logarytmiczne_stopy, method = "pearson")
+  
+  # Korelacja Spearmana
+  cor_spearman <- cor(dane1$logarytmiczne_stopy, dane2$logarytmiczne_stopy, method = "spearman")
+  
+  # Test korelacji Spearmana
+  test_spearman <- cor.test(dane1$logarytmiczne_stopy, dane2$logarytmiczne_stopy, method = "spearman")
+  
+  # Wyświetlanie wyników
+  
+  #Pearsona
+  cat( 
+    "Współczynnik korelacji Pearsona: ", 
+    cor_pearson, 
+    "\nTest istotności korelacji Pearsona:", 
+    sep = "\n" 
+  )
+  print(test_pearson)
+  
+  #Spermana
+  cat(
+    "Współczynnik korelacji Spearmana: ", 
+    cor_spearman, 
+    "\nTest istotności korelacji Spearmana:", 
+    sep = "\n"
+  )
+  print(test_spearman)
+    
+}
+
+wsp_korelacji(dane1,dane2)
+```
+
+### Współczynniki korelacji wynoszą odpowiednio
+
++ 0.1732326 dla współczynnika Pearsona 
++ 0.1499769 dla współczynnika Spermana
+
+### Interpretacja testu istotności i współczynnika korelacji Pearsona:
+
++ Współczynnik korelacji Pearsona wynosi 0.1732326, co oznacza, że związek liniowy między zmiennymi jest bardzo słaby i dodatni. Oznacza to, że gdy jedna zmienna rośnie, druga zmienna ma tendencję do wzrostu, ale w niewielkim stopniu.
++ Test istotności korelacji Pearsona pokazuje, że p-value jest 9.886 * $10^{-5}$, co jest mniejsze niż poziom istotności 0.05. Oznacza to, że możemy odrzucić hipotezę zerową, że prawdziwa korelacja jest równa zero, i przyjąć hipotezę alternatywną, że prawdziwa korelacja jest różna od zera. Innymi słowy, istnieje istotna statystycznie korelacja liniowa między zmiennymi.
++ Przedział ufności 95% dla korelacji Pearsona wynosi [0.08686152, 0.25701885], co oznacza, że jesteśmy pewni w 95%, że prawdziwa korelacja liniowa między zmiennymi mieści się w tym przedziale.
+  
+### Interpretacja testu istotności i współczynnika korelacji Spearmana:
+
+ + Współczynnik korelacji Spearmana wynosi 0.1499769, co oznacza, że związek monotoniczny między zmiennymi jest bardzo słaby i dodatni. Oznacza to, że gdy jedna zmienna rośnie, druga zmienna ma tendencję do wzrostu, ale niekoniecznie w sposób liniowy.
+ + Test istotności korelacji Spearmana pokazuje, że p-value jest 0.0007676, co jest mniejsze niż poziom istotności 0.05. Oznacza to, że możemy odrzucić hipotezę zerową, że prawdziwa korelacja jest równa zero, i przyjąć hipotezę alternatywną, że prawdziwa korelacja jest różna od zera. Innymi słowy, istnieje istotna statystycznie korelacja monotoniczna między zmiennymi.
+
+## Test istotności różnicy wartości oczekiwanej
+
+### Wartości oczekiwane zadanych rozkładów wynoszą odpowiednio
+
++ -4.749082 * $10^{-5}$ dla danych nr. 1
++ -0.002356371 dla danych nr. 2
+
+```{r echo=FALSE}
+ex_spolek_rozn <- function(dane1, dane2) {
+  
+  logarytmiczne_stopy1 <- na.omit(dane1$logarytmiczne_stopy)
+  logarytmiczne_stopy2 <- na.omit(dane2$logarytmiczne_stopy)
+  
+  cat( 
+    "EX dla danych nr 1:",
+    mean(logarytmiczne_stopy1),
+    "EX dla danych nr 2:",
+    mean(logarytmiczne_stopy2),
+    sep = "\n"
+  )
+  
+  print( t.test(
+    dane1$logarytmiczne_stopy,
+    dane2$logarytmiczne_stopy
+  ) )
+}
+
+ex_spolek_rozn(dane1,dane2)
+```
+
+> Interpretacja testu:
+Nie ma podstaw do odrzucenia hipotezy zerowej (H0), gdyż wartość p-value wynosi 0.2096, co jest większe niż przyjęty poziom istotności 0.05. Nie ma statystycznie istotnej różnicy między średnimi grup na poziomie istotności 0.05.
+
+
